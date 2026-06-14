@@ -9,13 +9,51 @@ const PLUGIN_DIR = path.join(__dirname, 'Plugin');
 const manifestFileName = 'plugin-manifest.json';
 
 class PluginManager {
+    /**
+     * 跨平台进程树终止方法。
+     * Windows 上 shell:true 会创建 cmd.exe 包装进程，直接 kill 只杀 cmd 不杀子进程，
+     * 导致孤儿进程。此方法使用 taskkill /T /F 递归杀死整个进程树。
+     * Linux/macOS 上使用负 PID 发送信号给进程组，或回退到普通 SIGKILL。
+     */
+    _killProcessTree(pid, pluginName) {
+        if (!pid) return;
+        try {
+            if (process.platform === 'win32') {
+                spawn('taskkill', ['/T', '/F', '/PID', pid.toString()], {
+                    windowsHide: true,
+                    stdio: 'ignore'
+                });
+                if (this.debugMode) console.log(`[DistPluginManager] Sent taskkill /T /F /PID ${pid} for plugin "${pluginName}"`);
+            } else {
+                try {
+                    process.kill(-pid, 'SIGKILL');
+                } catch (e) {
+                    try { process.kill(pid, 'SIGKILL'); } catch (e2) { /* 进程可能已退出 */ }
+                }
+                if (this.debugMode) console.log(`[DistPluginManager] Sent SIGKILL to process group -${pid} for plugin "${pluginName}"`);
+            }
+        } catch (err) {
+            console.warn(`[DistPluginManager] Failed to kill process tree for plugin "${pluginName}" (PID: ${pid}): ${err.message}`);
+        }
+    }
+
     constructor() {
         this.plugins = new Map();
-        this.serviceModules = new Map(); // 用于存储服务类插件
-        this.staticPlaceholderValues = new Map(); // 用于存储静态插件占位符值
-        this.scheduledJobs = new Map(); // 用于存储定时任务
+        this.serviceModules = new Map(); // 新增：用于存储服务类插件
+        this.staticPlaceholderValues = new Map(); // 新增：用于存储静态插件占位符值
+        this.scheduledJobs = new Map(); // 新增：用于存储定时任务
+        this.runningStaticPlugins = new Set(); // 静态插件单实例运行保护：同名插件运行中则跳过新触发
+        this.lastStaticPluginRunAt = new Map(); // 静态插件最近一次启动时间，用于最小间隔保护
+        this.staticPluginSkipLogAt = new Map(); // 限制跳过日志频率，避免唤醒风暴刷屏
         this.projectBasePath = null;
+        this.serverPort = null; // 新增：用于构造回调 URL
         this.debugMode = (process.env.DebugMode || "False").toLowerCase() === "true";
+        this.staticPluginMinIntervalMs = parseInt(process.env.STATIC_PLUGIN_MIN_INTERVAL_MS || '10000', 10);
+        this.staticPluginMaxScheduleDelayMs = parseInt(process.env.STATIC_PLUGIN_MAX_SCHEDULE_DELAY_MS || '60000', 10);
+    }
+
+    setServerPort(port) {
+        this.serverPort = port;
     }
 
     setProjectBasePath(basePath) {
@@ -178,24 +216,55 @@ class PluginManager {
         if (this.projectBasePath) {
             envForProcess.PROJECT_BASE_PATH = this.projectBasePath;
         }
+
+        // --- 异步插件特殊环境变量注入 ---
+        const isAsyncPlugin = plugin.pluginType === 'asynchronous';
+        if (isAsyncPlugin) {
+            if (this.serverPort) {
+                envForProcess.CALLBACK_BASE_URL = `http://127.0.0.1:${this.serverPort}/plugin/callback`;
+            }
+            envForProcess.PLUGIN_NAME_FOR_CALLBACK = pluginName;
+        }
+
         envForProcess.PYTHONIOENCODING = 'utf-8';
 
         return new Promise((resolve, reject) => {
             const [command, ...args] = plugin.entryPoint.command.split(' ');
-            const pluginProcess = spawn(command, args, { cwd: plugin.basePath, shell: true, env: envForProcess });
+            const pluginProcess = spawn(command, args, { cwd: plugin.basePath, shell: true, env: envForProcess, windowsHide: true });
 
             let outputBuffer = '';
             let errorOutput = '';
-            const timeoutDuration = plugin.entryPoint?.timeout || plugin.communication?.timeout || 60000;
+            let initialResponseSent = false;
+            const timeoutDuration = plugin.entryPoint?.timeout || plugin.communication?.timeout || (isAsyncPlugin ? 1800000 : 60000);
 
             const timeoutId = setTimeout(() => {
-                pluginProcess.kill('SIGKILL');
-                reject(new Error(`Plugin "${pluginName}" execution timed out.`));
+                if (!initialResponseSent) {
+                    this._killProcessTree(pluginProcess.pid, pluginName);
+                    reject(new Error(`Plugin "${pluginName}" execution timed out.`));
+                }
             }, timeoutDuration);
 
             pluginProcess.stdout.setEncoding('utf8');
             pluginProcess.stdout.on('data', (data) => {
+                if (isAsyncPlugin && initialResponseSent) return;
+
                 outputBuffer += data;
+
+                // 异步插件早期返回逻辑
+                if (isAsyncPlugin) {
+                    try {
+                        const potentialJsonMatch = outputBuffer.match(/(\{[\s\S]*?\})(?:\s|$)/);
+                        if (potentialJsonMatch && potentialJsonMatch[1]) {
+                            const parsedOutput = JSON.parse(potentialJsonMatch[1]);
+                            if (parsedOutput && (parsedOutput.status === "success" || parsedOutput.status === "error")) {
+                                initialResponseSent = true;
+                                resolve(outputBuffer.trim());
+                            }
+                        }
+                    } catch (e) {
+                        // Incomplete JSON, wait for more data
+                    }
+                }
             });
 
             pluginProcess.stderr.setEncoding('utf8');
@@ -208,18 +277,22 @@ class PluginManager {
                 reject(new Error(`Failed to start plugin "${pluginName}": ${err.message}`));
             });
 
-            pluginProcess.on('exit', (code) => {
+            pluginProcess.on('exit', (code, signal) => {
                 clearTimeout(timeoutId);
-                if (code !== 0) {
+                if (isAsyncPlugin && initialResponseSent) {
+                    if (this.debugMode) console.log(`[DistPluginManager] Async plugin ${pluginName} exited after initial response.`);
+                    return;
+                }
+
+                if (code !== 0 && signal !== 'SIGKILL' && signal !== 'SIGTERM') {
                     const errMsg = `Plugin ${pluginName} exited with code ${code}. Stderr: ${errorOutput.trim()}`;
                     console.error(`[DistPluginManager] ${errMsg}`);
-                    reject(new Error(errMsg));
+                    if (!initialResponseSent) reject(new Error(errMsg));
                 } else {
                     if (errorOutput.trim() && this.debugMode) {
                         console.warn(`[DistPluginManager] Plugin ${pluginName} produced stderr: ${errorOutput.trim()}`);
                     }
-                    // The raw result from the plugin's stdout
-                    resolve(outputBuffer.trim());
+                    if (!initialResponseSent) resolve(outputBuffer.trim());
                 }
             });
 
@@ -229,8 +302,7 @@ class PluginManager {
             pluginProcess.stdin.end();
         });
     }
-
-    // 初始化服务类插件的方法
+    // 新增：初始化服务类插件的方法
     async initializeServices(app, adminApiRouter, projectBasePath) {
         if (!app) {
             console.error('[DistPluginManager] Cannot initialize services without Express app instance.');
@@ -253,7 +325,16 @@ class PluginManager {
         console.log('[DistPluginManager] Service plugins initialized.');
     }
 
-    // 执行静态插件命令
+    _logStaticPluginSkip(pluginName, reason) {
+        const now = Date.now();
+        const lastLogAt = this.staticPluginSkipLogAt.get(pluginName) || 0;
+        if (this.debugMode || now - lastLogAt > 60000) {
+            console.warn(`[DistPluginManager] Skipping static plugin "${pluginName}": ${reason}`);
+            this.staticPluginSkipLogAt.set(pluginName, now);
+        }
+    }
+
+    // 新增：执行静态插件命令
     async _executeStaticPluginCommand(plugin) {
         if (!plugin || plugin.pluginType !== 'static' || !plugin.entryPoint || !plugin.entryPoint.command) {
             console.error(`[DistPluginManager] Invalid static plugin or command for execution: ${plugin ? plugin.name : 'Unknown'}`);
@@ -277,13 +358,23 @@ class PluginManager {
             let output = '';
             let errorOutput = '';
             let processExited = false;
+            let settled = false;
             const timeoutDuration = plugin.communication?.timeout || 30000;
+
+            const finish = (fn, value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                fn(value);
+            };
 
             const timeoutId = setTimeout(() => {
                 if (!processExited) {
-                    console.error(`[DistPluginManager] Static plugin "${plugin.name}" execution timed out after ${timeoutDuration}ms.`);
-                    pluginProcess.kill('SIGKILL');
-                    reject(new Error(`Static plugin "${plugin.name}" execution timed out.`));
+                    processExited = true;
+                    console.warn(`[DistPluginManager] Static plugin "${plugin.name}" timed out after ${timeoutDuration}ms, terminating process tree.`);
+                    this._killProcessTree(pluginProcess.pid, plugin.name);
+                    // 超时不作为错误 - static 插件超时后返回已收集的输出，上层会保留旧值或设置不可用
+                    finish(resolve, output.trim());
                 }
             }, timeoutDuration);
 
@@ -292,33 +383,62 @@ class PluginManager {
 
             pluginProcess.on('error', (err) => {
                 processExited = true;
-                clearTimeout(timeoutId);
                 console.error(`[DistPluginManager] Failed to start static plugin ${plugin.name}: ${err.message}`);
-                reject(err);
+                finish(reject, err);
             });
             
             pluginProcess.on('exit', (code, signal) => {
                 processExited = true;
-                clearTimeout(timeoutId);
-                if (signal === 'SIGKILL') {
+                if (settled) return;
+                if (signal === 'SIGKILL' || signal === 'SIGTERM') {
+                    finish(resolve, output.trim());
+                    return;
+                }
+                if (code === 1 && !output.trim() && !errorOutput.trim()) {
+                    // Windows taskkill 导致的退出码 1，且无有效输出，视为超时终止
+                    finish(resolve, output.trim());
                     return;
                 }
                 if (code !== 0) {
                     const errMsg = `Static plugin ${plugin.name} exited with code ${code}. Stderr: ${errorOutput.trim()}`;
                     console.error(`[DistPluginManager] ${errMsg}`);
-                    reject(new Error(errMsg));
+                    finish(reject, new Error(errMsg));
                 } else {
                     if (errorOutput.trim() && this.debugMode) {
                         console.warn(`[DistPluginManager] Static plugin ${plugin.name} produced stderr output: ${errorOutput.trim()}`);
                     }
-                    resolve(output.trim());
+                    finish(resolve, output.trim());
                 }
             });
         });
     }
 
-    // 更新静态插件值
-    async _updateStaticPluginValue(plugin) {
+    // 新增：更新静态插件值
+    async _updateStaticPluginValue(plugin, options = {}) {
+        const pluginName = plugin?.name || 'Unknown';
+        if (this.runningStaticPlugins.has(pluginName)) {
+            this._logStaticPluginSkip(pluginName, 'previous run is still active');
+            return;
+        }
+
+        if (options.fireDate instanceof Date) {
+            const scheduleDelayMs = Date.now() - options.fireDate.getTime();
+            if (scheduleDelayMs > this.staticPluginMaxScheduleDelayMs) {
+                this._logStaticPluginSkip(pluginName, `scheduled run is stale (${scheduleDelayMs}ms late)`);
+                return;
+            }
+        }
+
+        const now = Date.now();
+        const lastRunAt = this.lastStaticPluginRunAt.get(pluginName) || 0;
+        if (this.staticPluginMinIntervalMs > 0 && now - lastRunAt < this.staticPluginMinIntervalMs) {
+            this._logStaticPluginSkip(pluginName, `minimum interval guard (${now - lastRunAt}ms < ${this.staticPluginMinIntervalMs}ms)`);
+            return;
+        }
+
+        this.runningStaticPlugins.add(pluginName);
+        this.lastStaticPluginRunAt.set(pluginName, now);
+
         let newValue = null;
         let executionError = null;
         try {
@@ -327,6 +447,8 @@ class PluginManager {
         } catch (error) {
             console.error(`[DistPluginManager] Error executing static plugin ${plugin.name} script:`, error.message);
             executionError = error;
+        } finally {
+            this.runningStaticPlugins.delete(pluginName);
         }
 
         if (plugin.capabilities && plugin.capabilities.systemPromptPlaceholders) {
@@ -380,7 +502,7 @@ class PluginManager {
         }
     }
 
-    // 初始化静态插件
+    // 新增：初始化静态插件
     async initializeStaticPlugins() {
         console.log('[DistPluginManager] Initializing static plugins...');
         for (const plugin of this.plugins.values()) {
@@ -403,9 +525,9 @@ class PluginManager {
                         this.scheduledJobs.get(plugin.name).cancel();
                     }
                     try {
-                        const job = schedule.scheduleJob(plugin.refreshIntervalCron, () => {
+                        const job = schedule.scheduleJob(plugin.refreshIntervalCron, (fireDate) => {
                             if (this.debugMode) console.log(`[DistPluginManager] Scheduled update for static plugin: ${plugin.name}`);
-                            this._updateStaticPluginValue(plugin).catch(err => {
+                            this._updateStaticPluginValue(plugin, { fireDate }).catch(err => {
                                 console.error(`[DistPluginManager] Scheduled background update for ${plugin.name} failed: ${err.message}`);
                             });
                         });
@@ -420,12 +542,12 @@ class PluginManager {
         console.log('[DistPluginManager] Static plugins initialization process has been started (updates will run in the background).');
     }
 
-    // 获取占位符值
+    // 新增：获取占位符值
     getPlaceholderValue(placeholder) {
         return this.staticPlaceholderValues.get(placeholder) || `[Placeholder ${placeholder} not found]`;
     }
 
-    // 获取所有静态占位符值
+    // 新增：获取所有静态占位符值
     getAllPlaceholderValues() {
         const valuesMap = new Map();
         for (const [key, value] of this.staticPlaceholderValues.entries()) {
@@ -436,7 +558,7 @@ class PluginManager {
         return valuesMap;
     }
 
-    // 关闭所有插件
+    // 新增：关闭所有插件
     async shutdownAllPlugins() {
         console.log('[DistPluginManager] Shutting down all plugins...');
         for (const job of this.scheduledJobs.values()) {
