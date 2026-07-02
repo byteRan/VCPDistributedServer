@@ -119,3 +119,9 @@ python scripts/build_plugin_store.py --exclude-blocked
 - 发布前运行 `python scripts/build_plugin_store.py`，提交更新后的 `plugins.json` 与对应插件 ZIP。
 - 不要在插件目录内提交敏感配置；脚本默认会排除 `config.env`、`.env`、`node_modules/`、`.venv/`、`__pycache__/` 等文件。
 - 插件有 Node.js 依赖时提交 `package.json` 即可，VCPToolBox 安装器会在安装后按需执行依赖安装。
+
+## 6. 协议与证书声明
+
+本仓库已更新并采用 `LICENSE` 文件中声明的 **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License（CC BY-NC-SA 4.0）** 作为项目协议证书。
+
+使用、复制、分发、修改或基于本项目进行二次创作时，均需遵守该协议条款，包括但不限于署名、非商业使用以及相同方式共享等要求。请在使用前完整阅读仓库根目录的 `LICENSE` 文件。
