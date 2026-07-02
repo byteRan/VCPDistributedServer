@@ -1,6 +1,6 @@
 {
-  "name": "ServerFileOperator",
-  "displayName": "VCP服务器文件操作器",
+  "name": "DistributeFileOperator",
+  "displayName": "VCP分布式文件操作器",
   "pluginType": "synchronous",
   "version": "1.0.1",
   "description": "VCP服务器专用的一个强大的文件系统操作插件，允许AI对受限目录进行读、写、列出、移动、复制、删除等多种文件和目录操作。特别增强了文件读取能力，可自动提取PDF、Word(.docx)和表格(.xlsx, .csv)文件的纯文本内容。",
