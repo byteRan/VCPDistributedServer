@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-02T19:42:01.274586+00:00",
+  "generatedAt": "2026-07-04T04:06:40.922541+00:00",
   "source": {
     "name": "VCP 官方插件商店",
     "repository": "https://github.com/lioensky/VCPDistributedServer",
@@ -210,12 +210,22 @@
     {
       "name": "SunoGen",
       "displayName": "Suno AI 音乐生成",
-      "description": "使用 Suno API 生成原创歌曲。支持通过歌词、风格、标题进行自定义创作，或通过描述获取灵感创作，还可以继续生成已有的歌曲片段。",
+      "description": "使用 Suno API 生成原创歌曲。该版本为Newapi代理的通用版本。支持通过歌词、风格、标题进行自定义创作，或通过描述获取灵感创作，还可以继续生成已有的歌曲片段。",
       "version": "0.1.0",
       "author": "VCP Team",
       "icon": "extension",
       "category": "tool",
       "downloadUrl": "https://raw.githubusercontent.com/lioensky/VCPDistributedServer/main/Plugin/SunoGen/SunoGen.zip"
+    },
+    {
+      "name": "SunoMusicGen",
+      "displayName": "Suno音乐生成器(新API)",
+      "description": "使用新的Suno API(sunoapi.org)生成高质量AI音乐、支持音乐延长和音频处理（异步版本）",
+      "version": "2.2.0",
+      "author": "Ava",
+      "icon": "extension",
+      "category": "tool",
+      "downloadUrl": "https://raw.githubusercontent.com/lioensky/VCPDistributedServer/main/Plugin/SunoMusicGen/SunoMusicGen.zip"
     },
     {
       "name": "TinyFishBrowser",

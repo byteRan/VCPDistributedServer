@@ -1,0 +1,64 @@
+{
+  "manifestVersion": "1.0.0",
+  "name": "SunoMusicGen",
+  "displayName": "Suno音乐生成器(新API)",
+  "version": "2.2.0",
+  "description": "使用新的Suno API(sunoapi.org)生成高质量AI音乐、支持音乐延长和音频处理（异步版本）",
+  "author": "Ava",
+  "pluginType": "asynchronous",
+  "entryPoint": {
+    "type": "nodejs",
+    "command": "node SunoMusicGen.mjs"
+  },
+  "communication": {
+    "protocol": "stdio",
+    "timeout": 1800000
+  },
+  "configSchema": {
+    "SUNO_API_KEY": {
+      "type": "string",
+      "description": "Suno API密钥",
+      "required": true
+    },
+    "SUNO_API_BASE_URL": {
+      "type": "string",
+      "description": "Suno API基础URL",
+      "default": "https://api.sunoapi.org"
+    },
+    "POLLING_INTERVAL_MS": {
+      "type": "number",
+      "description": "轮询间隔(毫秒)",
+      "default": 10000
+    },
+    "MAX_POLLING_ATTEMPTS": {
+      "type": "number",
+      "description": "最大轮询次数",
+      "default": 60
+    }
+  },
+  "capabilities": {
+    "invocationCommands": [
+      {
+        "command": "submit",
+        "description": "提交音乐生成任务\n\n**重要提示：音乐生成需要1-3分钟，请在调用成功后告知用户任务已提交，稍后会自动更新结果。**\n\n**🎵 音频展示提示：当获取到音频链接后，请使用HTML的 `<audio>` 标签将其优雅地呈现给用户，格式如下：**\n```html\n<audio controls>\n  <source src=\"音频链接\" type=\"audio/mpeg\">\n  您的浏览器不支持音频播放。\n</audio>\n```\n**同时提供下载链接：**\n```html\n<a href=\"音频链接\" download=\"歌曲标题.mp3\">💾 下载音频</a>\n```\n\n**基础参数:**\n- tool_name:「始」SunoMusicGen「末」\n- command:「始」submit「末」\n\n**模式一：描述模式(简单)**\n- prompt:「始」音乐描述，如'一首宁静的原声吉他旋律配柔和人声，民谣风格'「末」(必需)\n- instrumental:「始」true/false「末」(可选，是否纯音乐，默认false)\n- model:「始」V3_5/V4/V4_5/V4_5PLUS/V5「末」(可选，默认V5)\n\n**模式二：自定义模式(高级)**\n- customMode:「始」true「末」(必需)\n- prompt:「始」歌词内容，可包含[Verse],[Chorus]等标记「末」(必需)\n- style:「始」音乐风格，如'民谣流行'「末」(必需)\n- title:「始」歌曲标题「末」(必需)\n- instrumental:「始」true/false「末」(可选)\n- model:「始」V3_5/V4/V4_5/V4_5PLUS/V5/V5.5「末」(可选)\n\n**模型说明:**\n- V5: 🔥 **最新版本！** 更卓越的音乐表现力，生成速度更快\n- V4_5PLUS: V4.5+ 音色更丰富，新的创作方式，最长8分钟\n- V4_5: V4.5 更智能的提示词，更快的生成速度，最长8分钟\n- V4: V4 改进的人声质量，最长4分钟\n- V3_5: V3.5 更好的歌曲结构，最长4分钟\n\n**成功时将返回一个动态上下文占位符，请在你的回复中包含占位符原文：{{VCP_ASYNC_RESULT::SunoMusicGen::{taskId}}}**\n\n**调用示例(描述模式):**\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」SunoMusicGen「末」,\ncommand:「始」submit「末」,\nprompt:「始」一首充满活力的电子舞曲，带有合成器主音「末」,\nmodel:「始」V5「末」\n<<<[END_TOOL_REQUEST]>>>\n\n**调用示例(自定义模式):**\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」SunoMusicGen「末」,\ncommand:「始」submit「末」,\ncustomMode:「始」true「末」,\nprompt:「始」[Verse 1]\\n阳光洒在脸上\\n温暖的拥抱\\n[Chorus]\\n美好的一天「末」,\nstyle:「始」民谣流行「末」,\ntitle:「始」阳光之歌「末」,\nmodel:「始」V5「末」\n<<<[END_TOOL_REQUEST]>>>",
+        "example": "<<<[TOOL_REQUEST]>>>\ntool_name:「始」SunoMusicGen「末」,\ncommand:「始」submit「末」,\nprompt:「始」一首宁静的钢琴曲，适合冥想「末」,\ninstrumental:「始」true「末」,\nmodel:「始」V4「末」\n<<<[END_TOOL_REQUEST]>>>"
+      },
+      {
+        "command": "extend",
+        "description": "延长或修改现有音乐作品\n\n**重要提示：音乐延长需要1-3分钟，请在调用成功后告知用户任务已提交。**\n\n**🎵 音频展示提示：完成后请使用HTML `<audio>` 标签展示结果。**\n\n**基础参数:**\n- tool_name:「始」SunoMusicGen「末」\n- command:「始」extend「末」\n- audioId:「始」要延长的音频ID「末」(必需)\n- defaultParamFlag:「始」true/false「末」(必需，控制参数模式)\n- model:「始」V3_5/V4/V4_5/V4_5PLUS/V5/V5.5「末」(必需，需与原音频一致)\n\n**模式一：使用原始参数(简单)**\n- defaultParamFlag:「始」false「末」\n- audioId:「始」音频ID「末」\n- model:「始」模型版本「末」\n\n**模式二：自定义参数(高级)**\n- defaultParamFlag:「始」true「末」\n- audioId:「始」音频ID「末」\n- continueAt:「始」开始延长的时间点(秒)「末」(必需，如60表示从第60秒开始)\n- prompt:「始」描述如何延长音乐「末」(必需)\n- style:「始」音乐风格「末」(必需)\n- title:「始」延长版标题「末」(必需)\n- negativeTags:「始」需要排除的风格「末」(可选)\n- vocalGender:「始」m/f「末」(可选，人声性别)\n\n**高级参数(可选):**\n- styleWeight:「始」0.00-1.00「末」(风格权重)\n- weirdnessConstraint:「始」0.00-1.00「末」(创意约束)\n- audioWeight:「始」0.00-1.00「末」(原音频影响力)\n\n**模型说明（使用的模型版本必须与源音频保持一致）:**\n- V5: 🔥 **最新版本！** 更卓越的音乐表现力，生成速度更快\n- V4_5PLUS: V4.5+ 音色更丰富，新的创作方式，最长8分钟\n- V4_5: V4.5 更智能的提示词，更快的生成速度，最长8分钟\n- V4: V4 改进的人声质量，最长4分钟\n- V3_5: V3.5 更好的歌曲结构，最长4分钟\n\n**调用示例(使用原始参数):**\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」SunoMusicGen「末」,\ncommand:「始」extend「末」,\ndefaultParamFlag:「始」false「末」,\naudioId:「始」e231xxxx-xxxx-xxxx「末」,\nmodel:「始」V5「末」\n<<<[END_TOOL_REQUEST]>>>\n\n**调用示例(自定义参数):**\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」SunoMusicGen「末」,\ncommand:「始」extend「末」,\ndefaultParamFlag:「始」true「末」,\naudioId:「始」e231xxxx-xxxx-xxxx「末」,\ncontinueAt:「始」60「末」,\nprompt:「始」添加一段优美的吉他独奏作为尾奏「末」,\nstyle:「始」古典流行「末」,\ntitle:「始」晨光之歌-延长版「末」,\nmodel:「始」V5「末」\n<<<[END_TOOL_REQUEST]>>>",
+        "example": "<<<[TOOL_REQUEST]>>>\ntool_name:「始」SunoMusicGen「末」,\ncommand:「始」extend「末」,\ndefaultParamFlag:「始」true「末」,\naudioId:「始」your_audio_id「末」,\ncontinueAt:「始」120「末」,\nprompt:「始」用更多舒缓的音符延长音乐「末」,\nstyle:「始」古典「末」,\ntitle:「始」宁静钢琴延长版「末」,\nmodel:「始」V3_5「末」\n<<<[END_TOOL_REQUEST]>>>"
+      },
+      {
+        "command": "query",
+        "description": "查询音乐生成任务状态\n\n**参数:**\n- tool_name:「始」SunoMusicGen「末」\n- command:「始」query「末」\n- taskId:「始」任务ID「末」(必需)\n\n**重要提示：如果状态是 'GENERATING' 或 'PENDING'，请告知用户仍在生成中。如果状态是 'SUCCESS'，将显示音频链接。**\n\n**🎵 音频展示提示：当状态为SUCCESS并获取到音频链接后，请使用HTML的 `<audio>` 标签将其呈现给用户：**\n```html\n<audio controls>\n  <source src=\"音频链接\" type=\"audio/mpeg\">\n  您的浏览器不支持音频播放。\n</audio>\n<a href=\"音频链接\" download=\"音乐.mp3\">💾 下载音频</a>\n```\n\n**调用示例:**\n<<<[TOOL_REQUEST]>>>\ntool_name:「始」SunoMusicGen「末」,\ncommand:「始」query「末」,\ntaskId:「始」suno_task_abc123「末」\n<<<[END_TOOL_REQUEST]>>>",
+        "example": "<<<[TOOL_REQUEST]>>>\ntool_name:「始」SunoMusicGen「末」,\ncommand:「始」query「末」,\ntaskId:「始」your_task_id「末」\n<<<[END_TOOL_REQUEST]>>>"
+      }
+    ]
+  },
+  "webSocketPush": {
+    "enabled": true,
+    "messageType": "music_generation_status",
+    "usePluginResultAsMessage": true,
+    "targetClientType": "VCPLog"
+  }
+}

@@ -2,7 +2,7 @@
   "name": "SunoGen",
   "displayName": "Suno AI 音乐生成",
   "version": "0.1.0",
-  "description": "使用 Suno API 生成原创歌曲。支持通过歌词、风格、标题进行自定义创作，或通过描述获取灵感创作，还可以继续生成已有的歌曲片段。",
+  "description": "使用 Suno API 生成原创歌曲。该版本为Newapi代理的通用版本。支持通过歌词、风格、标题进行自定义创作，或通过描述获取灵感创作，还可以继续生成已有的歌曲片段。",
   "pluginType": "synchronous",
   "entryPoint": {
     "command": "node SunoGen.mjs"
