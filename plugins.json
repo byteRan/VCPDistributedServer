@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-04T04:06:40.922541+00:00",
+  "generatedAt": "2026-07-09T02:39:50.237158+00:00",
   "source": {
     "name": "VCP 官方插件商店",
     "repository": "https://github.com/lioensky/VCPDistributedServer",
@@ -327,6 +327,16 @@
       "icon": "extension",
       "category": "tool",
       "downloadUrl": "https://raw.githubusercontent.com/lioensky/VCPDistributedServer/main/Plugin/WebUIGen/WebUIGen.zip"
+    },
+    {
+      "name": "YoucomSearch",
+      "displayName": "You.com 搜索插件",
+      "description": "使用 You.com API 进行网络搜索。AI可以指定搜索查询、返回结果数量、时效范围、国家及语言，获取网页与新闻结果。支持使用 || 分隔多个关键词进行并发搜索，所有结果同时返回。",
+      "version": "0.1.0",
+      "author": "Emos21",
+      "icon": "extension",
+      "category": "tool",
+      "downloadUrl": "https://raw.githubusercontent.com/lioensky/VCPDistributedServer/main/Plugin/YoucomSearch/YoucomSearch.zip"
     },
     {
       "name": "YoutubeFetch",
