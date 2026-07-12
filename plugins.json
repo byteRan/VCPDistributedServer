@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-09T02:39:50.237158+00:00",
+  "generatedAt": "2026-07-12T20:27:14.509346+00:00",
   "source": {
     "name": "VCP 官方插件商店",
     "repository": "https://github.com/lioensky/VCPDistributedServer",
@@ -249,8 +249,8 @@
     },
     {
       "name": "VCPQQBotServer",
-      "displayName": "VCP QQBot 单聊桥接服务",
-      "description": "常驻连接腾讯 QQBot Gateway，接收 QQ 单聊消息后转发到 VCP 主服务器 /v1/chat/completions，并将非流式 AI 回复拆分为 QQ 文本与图片消息发回用户。",
+      "displayName": "VCP QQBot 单聊/群聊桥接服务",
+      "description": "常驻连接腾讯 QQBot Gateway，接收 QQ 单聊与群聊 @ 消息后转发到 VCP 主服务器 /v1/chat/completions，并将非流式 AI 回复拆分为 QQ 文本与真正的 QQ 图片消息发回用户。",
       "version": "0.1.0",
       "author": "VCPToolBox",
       "icon": "extension",
